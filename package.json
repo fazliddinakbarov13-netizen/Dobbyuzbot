@@ -1,0 +1,14 @@
+{
+  "name": "dobbyuzbot",
+  "version": "1.0.0",
+  "description": "Gemini AI bilan ishlaydigan Telegram bot",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.0",
+    "dotenv": "^16.4.7",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
