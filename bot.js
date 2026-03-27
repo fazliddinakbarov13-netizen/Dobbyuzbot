@@ -124,7 +124,9 @@ function downloadFile(url) {
 // ===== Foto xabarlarni qayta ishlash =====
 bot.on("photo", async (msg) => {
   const chatId = msg.chat.id;
-  const caption = msg.caption || "Bu rasmda nima bor? Tahlil qilib ber.";
+  const caption = msg.caption || "Bu rasmda nima bor? Batafsil tahlil qilib, o'zbek tilida javob ber.";
+
+  console.log(`📷 Rasm qabul qilindi. ChatID: ${chatId}, Caption: ${caption}`);
 
   // Buyruqlarni o'tkazib yuborish
   if (caption.startsWith("/")) return;
@@ -137,19 +139,22 @@ bot.on("photo", async (msg) => {
     const fileInfo = await bot.getFile(photo.file_id);
     const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${fileInfo.file_path}`;
 
+    console.log(`📥 Rasm yuklanmoqda: ${fileInfo.file_path}`);
+
     // Rasmni yuklash
     const imageBuffer = await downloadFile(fileUrl);
     const base64Image = imageBuffer.toString("base64");
+
+    console.log(`✅ Rasm yuklandi. Hajmi: ${imageBuffer.length} bytes`);
 
     // Rasm formatini aniqlash
     const ext = fileInfo.file_path.split(".").pop().toLowerCase();
     const mimeTypes = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
     const mimeType = mimeTypes[ext] || "image/jpeg";
 
-    // Gemini ga rasm + matn yuborish
-    const chat = getChatSession(chatId);
-    const result = await chat.sendMessage([
-      { text: caption },
+    // Gemini ga rasm + matn yuborish (to'g'ridan-to'g'ri model orqali)
+    const result = await model.generateContent([
+      { text: SYSTEM_PROMPT + "\n\nFoydalanuvchi rasm yubordi. " + caption },
       {
         inlineData: {
           data: base64Image,
@@ -159,6 +164,7 @@ bot.on("photo", async (msg) => {
     ]);
 
     const response = result.response.text();
+    console.log(`🤖 Gemini javobi tayyor. Uzunligi: ${response.length}`);
 
     if (response.length > 4096) {
       for (let i = 0; i < response.length; i += 4096) {
@@ -168,7 +174,7 @@ bot.on("photo", async (msg) => {
       await bot.sendMessage(chatId, response);
     }
   } catch (error) {
-    console.error("Rasm xatosi:", error.message);
+    console.error("❌ Rasm xatosi:", error);
     bot.sendMessage(chatId, "❌ Rasmni qayta ishlashda xatolik yuz berdi. Qaytadan urinib ko'ring.");
   }
 });
