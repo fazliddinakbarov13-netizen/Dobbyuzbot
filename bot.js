@@ -1,6 +1,8 @@
 require("dotenv").config();
 const TelegramBot = require("node-telegram-bot-api");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const https = require("https");
+const http = require("http");
 
 // ===== Konfiguratsiya =====
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -102,13 +104,82 @@ bot.onText(/\/clear/, (msg) => {
   bot.sendMessage(chatId, "🧹 Suhbat tarixi tozalandi. Yangi suhbat boshlashingiz mumkin!");
 });
 
-// ===== Har bir xabarga Gemini orqali javob berish =====
+// ===== Rasmni yuklash funksiyasi =====
+function downloadFile(url) {
+  return new Promise((resolve, reject) => {
+    const client = url.startsWith("https") ? https : http;
+    client.get(url, (res) => {
+      // Handle redirects
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return downloadFile(res.headers.location).then(resolve).catch(reject);
+      }
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+// ===== Foto xabarlarni qayta ishlash =====
+bot.on("photo", async (msg) => {
+  const chatId = msg.chat.id;
+  const caption = msg.caption || "Bu rasmda nima bor? Tahlil qilib ber.";
+
+  // Buyruqlarni o'tkazib yuborish
+  if (caption.startsWith("/")) return;
+
+  bot.sendChatAction(chatId, "typing");
+
+  try {
+    // Eng katta o'lchamdagi rasmni olish
+    const photo = msg.photo[msg.photo.length - 1];
+    const fileInfo = await bot.getFile(photo.file_id);
+    const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${fileInfo.file_path}`;
+
+    // Rasmni yuklash
+    const imageBuffer = await downloadFile(fileUrl);
+    const base64Image = imageBuffer.toString("base64");
+
+    // Rasm formatini aniqlash
+    const ext = fileInfo.file_path.split(".").pop().toLowerCase();
+    const mimeTypes = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
+    const mimeType = mimeTypes[ext] || "image/jpeg";
+
+    // Gemini ga rasm + matn yuborish
+    const chat = getChatSession(chatId);
+    const result = await chat.sendMessage([
+      { text: caption },
+      {
+        inlineData: {
+          data: base64Image,
+          mimeType: mimeType,
+        },
+      },
+    ]);
+
+    const response = result.response.text();
+
+    if (response.length > 4096) {
+      for (let i = 0; i < response.length; i += 4096) {
+        await bot.sendMessage(chatId, response.substring(i, i + 4096));
+      }
+    } else {
+      await bot.sendMessage(chatId, response);
+    }
+  } catch (error) {
+    console.error("Rasm xatosi:", error.message);
+    bot.sendMessage(chatId, "❌ Rasmni qayta ishlashda xatolik yuz berdi. Qaytadan urinib ko'ring.");
+  }
+});
+
+// ===== Har bir matnli xabarga Gemini orqali javob berish =====
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  // Buyruqlar va matn bo'lmagan xabarlarni o'tkazib yuborish
-  if (!text || text.startsWith("/")) return;
+  // Buyruqlar, rasm va matn bo'lmagan xabarlarni o'tkazib yuborish
+  if (!text || text.startsWith("/") || msg.photo) return;
 
   // "Yozmoqda..." ko'rsatish
   bot.sendChatAction(chatId, "typing");
