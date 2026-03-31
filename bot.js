@@ -53,7 +53,7 @@ const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 // ===== Gemini AI =====
 const genAI = new GoogleGenerativeAI(GEMINI_KEY);
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
+  model: "gemini-2.0-flash",
   systemInstruction: SYSTEM_PROMPT,
 });
 
@@ -205,7 +205,7 @@ bot.on("message", async (msg) => {
       await bot.sendMessage(chatId, response);
     }
   } catch (error) {
-    console.error("Gemini xatosi:", error.message);
+    console.error("Gemini xatosi:", error.message, error.stack);
 
     let errorMsg = "❌ Xatolik yuz berdi. Iltimos, qaytadan urinib ko'ring.";
     if (error.message.includes("SAFETY")) {
